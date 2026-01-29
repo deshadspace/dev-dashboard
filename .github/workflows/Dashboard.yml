@@ -17,7 +17,7 @@ jobs:
       - name: Create dist directory
         run: mkdir -p dist
 
-      # Generate Snake Animation FIRST
+      # Generate Snake Animation
       - name: Generate snake SVG
         uses: Platane/snk/svg-only@v3
         with:
@@ -26,48 +26,84 @@ jobs:
             dist/github-snake.svg
             dist/github-snake-dark.svg?palette=github-dark
 
-      - name: Check snake files
+      # Try alternative stats sources
+      - name: Download GitHub stats from primary source
+        id: stats_primary
+        continue-on-error: true
         run: |
-          echo "Snake files created:"
-          ls -lah dist/github-snake*.svg || echo "No snake files found"
-
-      # Wait a moment before downloading stats
-      - name: Wait before stats download
-        run: sleep 5
-
-      # Download GitHub Stats with verbose output
-      - name: Download GitHub stats SVG
-        run: |
-          echo "Downloading GitHub stats..."
-          curl -v -L "https://github-readme-stats.vercel.app/api?username=deshadspace&show_icons=true&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&icon_color=00bcd4&text_color=ffffff" \
+          echo "Trying primary stats source..."
+          curl -f -L --retry 3 --retry-delay 5 \
+            "https://github-readme-stats.vercel.app/api?username=deshadspace&show_icons=true&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&icon_color=00bcd4&text_color=ffffff&include_all_commits=true&count_private=true" \
+            -H "User-Agent: Mozilla/5.0" \
             -o dist/stats-main.svg
-          echo "Stats download completed with exit code: $?"
-          if [ -f dist/stats-main.svg ]; then
-            echo "Stats file size: $(wc -c < dist/stats-main.svg) bytes"
-            head -c 200 dist/stats-main.svg
+          
+          # Check if it's actually an SVG
+          if grep -q "<svg" dist/stats-main.svg 2>/dev/null; then
+            echo "✅ Valid SVG downloaded"
+            exit 0
           else
-            echo "ERROR: stats-main.svg was not created!"
+            echo "❌ Not a valid SVG, trying alternative..."
+            rm -f dist/stats-main.svg
+            exit 1
           fi
 
-      # Wait between requests
-      - name: Wait before languages download
-        run: sleep 5
-
-      # Download Top Languages with verbose output
-      - name: Download top languages SVG
+      - name: Download GitHub stats from alternative source
+        if: steps.stats_primary.outcome == 'failure'
+        continue-on-error: true
         run: |
-          echo "Downloading top languages..."
-          curl -v -L "https://github-readme-stats.vercel.app/api/top-langs?username=deshadspace&layout=compact&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&text_color=ffffff" \
+          echo "Trying alternative stats source..."
+          curl -f -L --retry 3 --retry-delay 5 \
+            "https://github-readme-stats-sigma-five.vercel.app/api?username=deshadspace&show_icons=true&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&icon_color=00bcd4&text_color=ffffff" \
+            -H "User-Agent: Mozilla/5.0" \
+            -o dist/stats-main.svg
+
+      - name: Download languages from primary source
+        id: langs_primary
+        continue-on-error: true
+        run: |
+          sleep 3
+          echo "Trying primary languages source..."
+          curl -f -L --retry 3 --retry-delay 5 \
+            "https://github-readme-stats.vercel.app/api/top-langs?username=deshadspace&layout=compact&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&text_color=ffffff&langs_count=8" \
+            -H "User-Agent: Mozilla/5.0" \
             -o dist/stats-langs.svg
-          echo "Languages download completed with exit code: $?"
-          if [ -f dist/stats-langs.svg ]; then
-            echo "Languages file size: $(wc -c < dist/stats-langs.svg) bytes"
-            head -c 200 dist/stats-langs.svg
+          
+          # Check if it's actually an SVG
+          if grep -q "<svg" dist/stats-langs.svg 2>/dev/null; then
+            echo "✅ Valid SVG downloaded"
+            exit 0
           else
-            echo "ERROR: stats-langs.svg was not created!"
+            echo "❌ Not a valid SVG, trying alternative..."
+            rm -f dist/stats-langs.svg
+            exit 1
           fi
 
-      # Verify ALL files before pushing
+      - name: Download languages from alternative source
+        if: steps.langs_primary.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          echo "Trying alternative languages source..."
+          curl -f -L --retry 3 --retry-delay 5 \
+            "https://github-readme-stats-sigma-five.vercel.app/api/top-langs?username=deshadspace&layout=compact&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&text_color=ffffff" \
+            -H "User-Agent: Mozilla/5.0" \
+            -o dist/stats-langs.svg
+
+      # Create fallback badges if stats failed
+      - name: Create fallback badges if needed
+        run: |
+          if [ ! -f dist/stats-main.svg ] || ! grep -q "<svg" dist/stats-main.svg 2>/dev/null; then
+            echo "Creating fallback stats badge..."
+            curl -f "https://img.shields.io/badge/GitHub-Stats-00bcd4?style=for-the-badge&logo=github&logoColor=white" \
+              -o dist/stats-main.svg
+          fi
+          
+          if [ ! -f dist/stats-langs.svg ] || ! grep -q "<svg" dist/stats-langs.svg 2>/dev/null; then
+            echo "Creating fallback languages badge..."
+            curl -f "https://img.shields.io/badge/Top-Languages-00bcd4?style=for-the-badge&logo=github&logoColor=white" \
+              -o dist/stats-langs.svg
+          fi
+
+      # Verify all files
       - name: Verify all files
         run: |
           echo "=========================================="
@@ -76,23 +112,22 @@ jobs:
           ls -lah dist/
           echo ""
           echo "=========================================="
-          echo "📊 FILE CHECK:"
-          echo "=========================================="
-          echo "Snake SVG: $(test -f dist/github-snake.svg && echo '✅ EXISTS' || echo '❌ MISSING')"
-          echo "Snake Dark: $(test -f dist/github-snake-dark.svg && echo '✅ EXISTS' || echo '❌ MISSING')"
-          echo "Stats Main: $(test -f dist/stats-main.svg && echo '✅ EXISTS' || echo '❌ MISSING')"
-          echo "Stats Langs: $(test -f dist/stats-langs.svg && echo '✅ EXISTS' || echo '❌ MISSING')"
-          echo ""
-          echo "=========================================="
-          echo "📏 FILE SIZES:"
+          echo "📊 FILE VALIDATION:"
           echo "=========================================="
           for file in dist/*.svg; do
             if [ -f "$file" ]; then
-              echo "$(basename $file): $(wc -c < $file) bytes"
+              filename=$(basename "$file")
+              size=$(wc -c < "$file")
+              if grep -q "<svg" "$file" 2>/dev/null; then
+                echo "✅ $filename: ${size} bytes - Valid SVG"
+              else
+                echo "⚠️  $filename: ${size} bytes - May not be valid SVG"
+                head -c 200 "$file"
+              fi
             fi
           done
 
-      # Push all files together to output branch
+      # Push all files to output branch
       - name: Push to output branch
         uses: crazy-max/ghaction-github-pages@v4
         with:
