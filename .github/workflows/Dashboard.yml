@@ -1,0 +1,66 @@
+name: Generate Dashboard Assets
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"  # Every 6 hours
+
+permissions:
+  contents: write
+
+jobs:
+  generate-all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Create dist directory
+        run: mkdir -p dist
+
+      # Generate Snake Animation
+      - name: Generate snake SVG
+        uses: Platane/snk/svg-only@v3
+        with:
+          github_user_name: deshadspace
+          outputs: |
+            dist/github-snake.svg
+            dist/github-snake-dark.svg?palette=github-dark
+
+      # Download GitHub Stats
+      - name: Download GitHub stats SVG
+        run: |
+          curl -f "https://github-readme-stats.vercel.app/api?username=deshadspace&show_icons=true&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&icon_color=00bcd4&text_color=ffffff&cache_seconds=1800" \
+            -o dist/stats-main.svg || echo "⚠️ Stats download failed, continuing anyway"
+
+      # Download Top Languages
+      - name: Download top languages SVG
+        run: |
+          curl -f "https://github-readme-stats.vercel.app/api/top-langs?username=deshadspace&layout=compact&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&text_color=ffffff&cache_seconds=1800" \
+            -o dist/stats-langs.svg || echo "⚠️ Languages download failed, continuing anyway"
+
+      # Verify all files
+      - name: Verify files were created
+        run: |
+          echo "📁 Files in dist:"
+          ls -lah dist/
+          echo ""
+          echo "✅ Snake SVG: $(test -f dist/github-snake.svg && echo 'EXISTS' || echo 'MISSING')"
+          echo "✅ Stats main: $(test -f dist/stats-main.svg && echo 'EXISTS' || echo 'MISSING')"
+          echo "✅ Stats langs: $(test -f dist/stats-langs.svg && echo 'EXISTS' || echo 'MISSING')"
+          echo ""
+          if [ -f dist/stats-main.svg ]; then
+            echo "📊 Stats main size: $(wc -c < dist/stats-main.svg) bytes"
+          fi
+          if [ -f dist/stats-langs.svg ]; then
+            echo "📊 Stats langs size: $(wc -c < dist/stats-langs.svg) bytes"
+          fi
+
+      # Push all files together to output branch
+      - name: Push to output branch
+        uses: crazy-max/ghaction-github-pages@v4
+        with:
+          target_branch: output
+          build_dir: dist
+          keep_history: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
