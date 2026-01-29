@@ -1,0 +1,39 @@
+name: Generate GitHub Stats (Self-hosted)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"   # Runs once daily at midnight
+
+permissions:
+  contents: write
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Generate stats SVGs
+        run: |
+          mkdir -p stats
+          curl -H "Authorization: token ${{ secrets.devdashboard }}" \
+          -o stats/stats-main.svg \
+          https://github-readme-stats.vercel.app/api?username=deshadspace&show_icons=true&theme=dracula
+
+          curl -H "Authorization: token ${{ secrets.devdashboard }}" \
+          -o stats/stats-langs.svg \
+          https://github-readme-stats.vercel.app/api/top-langs?username=deshadspace&layout=compact&theme=dracula
+
+      - name: Move files to root
+        run: |
+          mv stats/stats-main.svg stats-main.svg
+          mv stats/stats-langs.svg stats-langs.svg
+
+      - name: Deploy to output branch
+        uses: crazy-max/ghaction-github-pages@v3
+        with:
+          target_branch: output
+          build_dir: .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
