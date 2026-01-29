@@ -3,7 +3,7 @@ name: Generate Dashboard Assets
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"  # Every 6 hours
+    - cron: "0 */6 * * *"
 
 permissions:
   contents: write
@@ -17,7 +17,7 @@ jobs:
       - name: Create dist directory
         run: mkdir -p dist
 
-      # Generate Snake Animation
+      # Generate Snake Animation FIRST
       - name: Generate snake SVG
         uses: Platane/snk/svg-only@v3
         with:
@@ -26,34 +26,71 @@ jobs:
             dist/github-snake.svg
             dist/github-snake-dark.svg?palette=github-dark
 
-      # Download GitHub Stats
+      - name: Check snake files
+        run: |
+          echo "Snake files created:"
+          ls -lah dist/github-snake*.svg || echo "No snake files found"
+
+      # Wait a moment before downloading stats
+      - name: Wait before stats download
+        run: sleep 5
+
+      # Download GitHub Stats with verbose output
       - name: Download GitHub stats SVG
         run: |
-          curl -f "https://github-readme-stats.vercel.app/api?username=deshadspace&show_icons=true&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&icon_color=00bcd4&text_color=ffffff&cache_seconds=1800" \
-            -o dist/stats-main.svg || echo "⚠️ Stats download failed, continuing anyway"
+          echo "Downloading GitHub stats..."
+          curl -v -L "https://github-readme-stats.vercel.app/api?username=deshadspace&show_icons=true&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&icon_color=00bcd4&text_color=ffffff" \
+            -o dist/stats-main.svg
+          echo "Stats download completed with exit code: $?"
+          if [ -f dist/stats-main.svg ]; then
+            echo "Stats file size: $(wc -c < dist/stats-main.svg) bytes"
+            head -c 200 dist/stats-main.svg
+          else
+            echo "ERROR: stats-main.svg was not created!"
+          fi
 
-      # Download Top Languages
+      # Wait between requests
+      - name: Wait before languages download
+        run: sleep 5
+
+      # Download Top Languages with verbose output
       - name: Download top languages SVG
         run: |
-          curl -f "https://github-readme-stats.vercel.app/api/top-langs?username=deshadspace&layout=compact&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&text_color=ffffff&cache_seconds=1800" \
-            -o dist/stats-langs.svg || echo "⚠️ Languages download failed, continuing anyway"
+          echo "Downloading top languages..."
+          curl -v -L "https://github-readme-stats.vercel.app/api/top-langs?username=deshadspace&layout=compact&theme=tokyonight&hide_border=true&bg_color=0d1117&title_color=00bcd4&text_color=ffffff" \
+            -o dist/stats-langs.svg
+          echo "Languages download completed with exit code: $?"
+          if [ -f dist/stats-langs.svg ]; then
+            echo "Languages file size: $(wc -c < dist/stats-langs.svg) bytes"
+            head -c 200 dist/stats-langs.svg
+          else
+            echo "ERROR: stats-langs.svg was not created!"
+          fi
 
-      # Verify all files
-      - name: Verify files were created
+      # Verify ALL files before pushing
+      - name: Verify all files
         run: |
-          echo "📁 Files in dist:"
+          echo "=========================================="
+          echo "📁 ALL FILES IN DIST:"
+          echo "=========================================="
           ls -lah dist/
           echo ""
-          echo "✅ Snake SVG: $(test -f dist/github-snake.svg && echo 'EXISTS' || echo 'MISSING')"
-          echo "✅ Stats main: $(test -f dist/stats-main.svg && echo 'EXISTS' || echo 'MISSING')"
-          echo "✅ Stats langs: $(test -f dist/stats-langs.svg && echo 'EXISTS' || echo 'MISSING')"
+          echo "=========================================="
+          echo "📊 FILE CHECK:"
+          echo "=========================================="
+          echo "Snake SVG: $(test -f dist/github-snake.svg && echo '✅ EXISTS' || echo '❌ MISSING')"
+          echo "Snake Dark: $(test -f dist/github-snake-dark.svg && echo '✅ EXISTS' || echo '❌ MISSING')"
+          echo "Stats Main: $(test -f dist/stats-main.svg && echo '✅ EXISTS' || echo '❌ MISSING')"
+          echo "Stats Langs: $(test -f dist/stats-langs.svg && echo '✅ EXISTS' || echo '❌ MISSING')"
           echo ""
-          if [ -f dist/stats-main.svg ]; then
-            echo "📊 Stats main size: $(wc -c < dist/stats-main.svg) bytes"
-          fi
-          if [ -f dist/stats-langs.svg ]; then
-            echo "📊 Stats langs size: $(wc -c < dist/stats-langs.svg) bytes"
-          fi
+          echo "=========================================="
+          echo "📏 FILE SIZES:"
+          echo "=========================================="
+          for file in dist/*.svg; do
+            if [ -f "$file" ]; then
+              echo "$(basename $file): $(wc -c < $file) bytes"
+            fi
+          done
 
       # Push all files together to output branch
       - name: Push to output branch
